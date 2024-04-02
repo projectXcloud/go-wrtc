@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 type Message struct {
@@ -20,6 +20,48 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// func sendTrackFromFFmpeg(peerConnection *webrtc.PeerConnection) error {
+// 	// Start FFmpeg process
+// 	cmd := exec.Command("ffmpeg", "-i", "input.mp4", "-f", "rtp", "-")
+// 	stdout, err := cmd.StdoutPipe()
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	// Start FFmpeg process
+// 	if err := cmd.Start(); err != nil {
+// 		return err
+// 	}
+
+// 	var track webrtc.TrackLocal
+// 	// Create a new RTPSender
+// 	rtpSender, err := peerConnection.AddTrack(track)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	// Read FFmpeg output and send it through RTPSender
+// 	go func() {
+// 		buf := make([]byte, 4096)
+// 		for {
+// 			n, err := stdout.Read(buf)
+// 			if err != nil {
+// 				break
+// 			}
+
+// 			// Send the data through RTPSender
+// 			err = rtpSender.Send(webrtc.RTPSendParameters{
+// 				Payload: buf[:n],
+// 			})
+// 			if err != nil {
+// 				break
+// 			}
+// 		}
+// 	}()
+
+// 	return nil
+// }
+
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -28,6 +70,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	defer ws.Close()
 
 	log.Println("New client connected")
+
+	// Create a new RTCPeerConnection
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		log.Printf("error creating peer connection: %v", err)
+
+	}
 
 	for {
 		_, p, err := ws.ReadMessage()
@@ -50,46 +99,29 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		// Log the unmarshalled Message
 		log.Printf("Received message: %+v", msg)
 
-		var peerConnection *webrtc.PeerConnection
-
 		// if TYPE == Initiation then create and send offer
 		if msg.Type == "Initiation" {
-			// Create a new RTCPeerConnection
-			peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+			// Example: Creating a data channel to simulate adding a "track"
+			// In practice, here you would start your FFmpeg process and prepare your RTPSender
+
+			// _, err := peerConnection.CreateDataChannel("audio", nil)
+			// if err != nil {
+			// 	log.Printf("Error creating data channel: %v", err)
+			// 	continue
+			// }
+			audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "audio/opus"}, "audio", "pion")
+			// audioTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: "audio/opus"}, "audio", "pion")
 			if err != nil {
-				log.Printf("error creating peer connection: %v", err)
+				log.Printf("error creating audio track: %v", err)
 				continue
 			}
-			defer peerConnection.Close()
 
-			// Handle ICE candidates
-			peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
-				if c == nil {
-					// All ICE candidates have been gathered
-					return
-				}
-
-				candidate, err := json.Marshal(c.ToJSON())
-				if err != nil {
-					log.Printf("error marshalling ICE candidate to JSON: %v", err)
-					return
-				}
-
-				iceCandidateMsg := Message{
-					Type: "candidate",
-					Data: string(candidate),
-				}
-
-				msgJSON, err := json.Marshal(iceCandidateMsg)
-				if err != nil {
-					log.Printf("error marshalling ICE candidate message to JSON: %v", err)
-					return
-				}
-
-				if err := ws.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
-					log.Printf("error sending ICE candidate message over WebSocket: %v", err)
-				}
-			})
+			// Add the audio track to the peer connection
+			_, err = peerConnection.AddTrack(audioTrack)
+			if err != nil {
+				log.Printf("error adding audio track: %v", err)
+				continue
+			}
 
 			// Create an offer
 			offer, err := peerConnection.CreateOffer(nil)
@@ -97,9 +129,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				log.Printf("error creating offer: %v", err)
 				continue
 			}
+			log.Println("11", offer)
 
 			// Set the local description to the offer
 			err = peerConnection.SetLocalDescription(offer)
+			// log.Println(peerConnection.LocalDescription())
 			if err != nil {
 				log.Printf("error setting local description: %v", err)
 				continue
@@ -130,8 +164,41 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				log.Printf("error sending message over WebSocket: %v", err)
 				continue
 			}
+		} else if msg.Type == "answer" {
+			// Declare a variable to hold the unmarshaled session description
+			var answer webrtc.SessionDescription
+
+			// Unmarshal the JSON string into the SessionDescription struct
+			err := json.Unmarshal([]byte(msg.Data), &answer)
+			if err != nil {
+				log.Printf("error unmarshaling answer: %v", err)
+				continue
+			}
+			// log.Println(peerConnection.LocalDescription())
+			log.Println("111", answer)
+			// Use the unmarshaled session description
+			err = peerConnection.SetRemoteDescription(answer)
+			if err != nil {
+				log.Printf("error setting remote description: %v", err)
+				continue
+			}
+
+			msgJSON, err := json.Marshal(Message{
+				Type: "reqice",
+				Data: "Start Sending Ice",
+			})
+			if err != nil {
+				log.Printf("error marshalling ICEreq message to JSON: %v", err)
+				return
+			}
+
+			if err := ws.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+				log.Printf("error sending ICEreq message over WebSocket: %v", err)
+			}
+
 		} else if msg.Type == "candidate" {
 			var candidate webrtc.ICECandidateInit
+			log.Println("Received ICE candidate:", msg.Data)
 			if err := json.Unmarshal([]byte(msg.Data), &candidate); err != nil {
 				log.Printf("error unmarshalling candidate: %v", err)
 				return
@@ -144,6 +211,37 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 
 			log.Println("Added ICE candidate")
+		} else if msg.Type == "reqice" {
+			// Handle ICE candidates
+			log.Println(1111, peerConnection.LocalDescription())
+			log.Println("\n\n\n", peerConnection.RemoteDescription())
+			peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
+				if c == nil {
+					// All ICE candidates have been gathered
+					return
+				}
+
+				candidate, err := json.Marshal(c.ToJSON())
+				if err != nil {
+					log.Printf("error marshalling ICE candidate to JSON: %v", err)
+					return
+				}
+
+				iceCandidateMsg := Message{
+					Type: "candidate",
+					Data: string(candidate),
+				}
+
+				msgJSON, err := json.Marshal(iceCandidateMsg)
+				if err != nil {
+					log.Printf("error marshalling ICE candidate message to JSON: %v", err)
+					return
+				}
+
+				if err := ws.WriteMessage(websocket.TextMessage, msgJSON); err != nil {
+					log.Printf("error sending ICE candidate message over WebSocket: %v", err)
+				}
+			})
 		}
 
 	}

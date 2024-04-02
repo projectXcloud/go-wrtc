@@ -24,6 +24,15 @@ ws.onmessage = function (event) {
                 // Once the remote description is set, create an answer
                 console.log(peerConnection.remoteDescription, 11112222)
                 
+                peerConnection.ontrack = function (event) {
+                    console.log("Received remote track:", event.streams[0]);
+                    var remoteStream = new MediaStream();
+                    remoteStream.addTrack(event.track[0]);
+                    var audioElement = document.createElement("audio");
+                    audioElement.srcObject = remoteStream;
+                    audioElement.play();
+                };
+
                 return peerConnection.createAnswer();
             })
                 .then(function (answer) {
@@ -37,27 +46,20 @@ ws.onmessage = function (event) {
                         type: "answer",
                         data: JSON.stringify(peerConnection.localDescription)
                     };
+                    console.log(answerMessage)
 
                     ws.send(JSON.stringify(answerMessage));
+                })
+                .then(()=>{
+                    ws.send(JSON.stringify({
+                        type: "reqice",
+                        data: "Start sending ice candidates"
+                    }))
                 })
                 .catch(function (err) {
                     console.error("Error handling the offer: ", err);
                 });
 
-            // Listen for local ICE candidates on the peer connection
-            peerConnection.onicecandidate = function (event) {
-                if (event.candidate) {
-                    console.log("New ICE candidate:", event.candidate);
-
-                    // Send the ICE candidate to the remote peer
-                    var candidateMessage = {
-                        type: "candidate",
-                        data: JSON.stringify(event.candidate)
-                    };
-
-                    ws.send(JSON.stringify(candidateMessage));
-                }
-            };
             break;
         }
         case "candidate": {
@@ -93,20 +95,25 @@ ws.onmessage = function (event) {
             }
             break;
         }
+        case "reqice": {
+            console.log("Request for ICE candidates received:", message.data);
         
-        case "answer":
-            // Handle answer
-            console.log("Answer received:", message.data);
-            // Process the answer here
+            // Listen for local ICE candidates on the peer connection
+            peerConnection.onicecandidate = function (event) {
+                // if (event.candidate) {
+                    console.log("New ICE candidate:", event.candidate);
+        
+                    // Send the ICE candidate to the remote peer
+                    var candidateMessage = {
+                        type: "candidate",
+                        data: JSON.stringify(event.candidate)
+                    };
+        
+                    ws.send(JSON.stringify(candidateMessage));
+                // }
+            };
             break;
-        case "initiation":
-            // Handle initiation
-            console.log("Initiation message received:", message.data);
-            // Process initiation here
-            break;
-        // Add more cases as needed for other message types
-        default:
-            console.log("Unknown message type:", message.type);
+        }
     }
 };
 ws.onopen = function (event) {
