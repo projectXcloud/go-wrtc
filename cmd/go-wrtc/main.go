@@ -1,12 +1,23 @@
 package main
 
 import (
+	// "bufio"
+	// "bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os/exec"
+	"time"
 
 	"github.com/gorilla/websocket"
+	// "github.com/pion/example-webrtc-applications/blob/v3.0.5/internal/gstreamer-src"
 	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
+	// "github.com/pion/webrtc/v4/pkg/media"
+	// "github.com/pion/example-webrtc-applications/v3/internal/gstreamer-src"
+	// "github.com/pion/webrtc/v3/examples/internal/gstreamer-src"
+	// "github.com/edgeimpulse/linux-sdk-go/image/gstreamer"
 )
 
 type Message struct {
@@ -69,7 +80,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	log.Println("New client connected")
+	//log.Println("New client connected")
 
 	// Create a new RTCPeerConnection
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -123,17 +134,19 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			log.Println("11", audioTrack)
+
 			// Create an offer
 			offer, err := peerConnection.CreateOffer(nil)
 			if err != nil {
 				log.Printf("error creating offer: %v", err)
 				continue
 			}
-			log.Println("11", offer)
+			//log.Println("11", offer)
 
 			// Set the local description to the offer
 			err = peerConnection.SetLocalDescription(offer)
-			// log.Println(peerConnection.LocalDescription())
+			// //log.Println(peerConnection.LocalDescription())
 			if err != nil {
 				log.Printf("error setting local description: %v", err)
 				continue
@@ -164,6 +177,44 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				log.Printf("error sending message over WebSocket: %v", err)
 				continue
 			}
+
+			// When Connected send audio data
+			peerConnection.OnConnectionStateChange(func(connectionState webrtc.PeerConnectionState) {
+				if connectionState == webrtc.PeerConnectionStateConnected {
+					log.Printf("Connection State has changed %s \n", connectionState.String())
+
+					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "opus", "-")
+					cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
+					stdoutPipe, err := cmd.StdoutPipe()
+					if err != nil {
+						log.Printf("error creating FFmpeg stdout pipe: %v", err)
+					}
+
+					if err := cmd.Start(); err != nil {
+						log.Printf("error starting FFmpeg process: %v", err)
+					}
+					// Use a buffer to read the data in chunks
+					buf := make([]byte, 4096) // Adjust the size as needed
+					// buf2 := make([]byte, 1024) // Adjust the size as needed
+					for {
+						n, err := stdoutPipe.Read(buf)
+						if err != nil {
+							if err == io.EOF {
+								break // End of file is expected for some commands
+							}
+							log.Printf("Error reading from stdout pipe: %v\n", err)
+							break
+						}
+						audioTrack.WriteSample(media.Sample{Data: buf[:n], Duration: time.Millisecond * 256})
+					}
+
+					// Wait for the command to finish
+					if err := cmd.Wait(); err != nil {
+						log.Printf("Command finished with error: %v\n", err)
+					}
+				}
+			})
+
 		} else if msg.Type == "answer" {
 			// Declare a variable to hold the unmarshaled session description
 			var answer webrtc.SessionDescription
@@ -174,8 +225,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				log.Printf("error unmarshaling answer: %v", err)
 				continue
 			}
-			// log.Println(peerConnection.LocalDescription())
-			log.Println("111", answer)
+			// //log.Println(peerConnection.LocalDescription())
+			//log.Println("111", answer)
 			// Use the unmarshaled session description
 			err = peerConnection.SetRemoteDescription(answer)
 			if err != nil {
@@ -198,7 +249,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		} else if msg.Type == "candidate" {
 			var candidate webrtc.ICECandidateInit
-			log.Println("Received ICE candidate:", msg.Data)
+			//log.Println("Received ICE candidate:", msg.Data)
 			if err := json.Unmarshal([]byte(msg.Data), &candidate); err != nil {
 				log.Printf("error unmarshalling candidate: %v", err)
 				return
@@ -210,11 +261,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			log.Println("Added ICE candidate")
+			//log.Println("Added ICE candidate")
 		} else if msg.Type == "reqice" {
 			// Handle ICE candidates
-			log.Println(1111, peerConnection.LocalDescription())
-			log.Println("\n\n\n", peerConnection.RemoteDescription())
+			//log.Println(1111, peerConnection.LocalDescription())
+			//log.Println("\n\n\n", peerConnection.RemoteDescription())
 			peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
 				if c == nil {
 					// All ICE candidates have been gathered
@@ -253,7 +304,7 @@ func main() {
 	http.HandleFunc("/ws", handleConnections)
 
 	// Start the server on localhost port 8000 and log any errors
-	log.Println("http server started on :6080")
+	//log.Println("http server started on :6080")
 	err := http.ListenAndServe(":6080", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)

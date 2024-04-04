@@ -1,6 +1,8 @@
 
 var ws = new WebSocket("ws://localhost:6080/ws");
 var peerConnection = new RTCPeerConnection();
+// Temporarily make it accessible globally for debugging:
+window.myPeerConnection = peerConnection
 
 ws.onmessage = function (event) {
     // console.log("Received: " + event.data);
@@ -23,7 +25,7 @@ ws.onmessage = function (event) {
             peerConnection.setRemoteDescription(offerDesc).then(function () {
                 // Once the remote description is set, create an answer
                 console.log(peerConnection.remoteDescription, 11112222)
-                
+
                 peerConnection.ontrack = function (event) {
                     console.log("Received remote track:", event.streams[0]);
                     var remoteStream = new MediaStream();
@@ -32,6 +34,26 @@ ws.onmessage = function (event) {
                     audioElement.srcObject = remoteStream;
                     audioElement.play();
                 };
+                window.myPeerConnection.getTransceivers().forEach(t => {
+                    console.log(`Transceiver mid=${t.mid}, kind=${t.receiver.track.kind}, trackId=${t.receiver.track.id}, trackEnabled=${t.receiver.track.enabled}`);
+                    // Check if the track is audio or video and select the appropriate element
+                    let mediaElement = null;
+                    if (t.receiver.track.kind === 'audio') {
+                        mediaElement = document.getElementById('audioPlayer'); // Assuming an <audio> element with this ID exists
+                    } else if (t.receiver.track.kind === 'video') {
+                        mediaElement = document.getElementById('videoPlayer'); // Assuming a <video> element with this ID exists
+                    }
+
+                    if (mediaElement) {
+                        // Attach the track to the media element
+                        const stream = new MediaStream([t.receiver.track]);
+                        mediaElement.srcObject = stream;
+                    }
+                });
+                window.myPeerConnection.getReceivers().forEach(r => {
+                    console.log(`Receiver Track kind=${r.track.kind}, id=${r.track.id}, enabled=${r.track.enabled}`);
+                });
+
 
                 return peerConnection.createAnswer();
             })
@@ -50,7 +72,7 @@ ws.onmessage = function (event) {
 
                     ws.send(JSON.stringify(answerMessage));
                 })
-                .then(()=>{
+                .then(() => {
                     ws.send(JSON.stringify({
                         type: "reqice",
                         data: "Start sending ice candidates"
@@ -64,52 +86,52 @@ ws.onmessage = function (event) {
         }
         case "candidate": {
             console.log("ICE candidate received:", message.data);
-        
+
             function addCandidate() {
                 var candidate = new RTCIceCandidate(JSON.parse(message.data));
                 peerConnection.addIceCandidate(candidate).catch(function (err) {
                     console.error("Error adding received ICE candidate:", err);
                 });
             }
-        
+
             // Check if both local and remote descriptions are set
             if (peerConnection.signalingState === "stable" || peerConnection.signalingState === "have-local-offer") {
                 addCandidate();
             } else {
                 console.log("Waiting for local and remote descriptions to be set before adding candidates");
-        
+
                 // Option 1: Queue the candidate and add it later
                 // This would require implementing a queue to hold candidates until they can be added.
-        
+
                 // Option 2: Use an event listener to wait for the descriptions to be set
                 // This example will add the candidate once the signaling state changes to stable.
                 // Note: You need to remove this listener when appropriate to avoid leaks.
-                var signalingStateListener = function() {
+                var signalingStateListener = function () {
                     if (peerConnection.signalingState === "stable") {
                         addCandidate();
                         peerConnection.removeEventListener("signalingstatechange", signalingStateListener);
                     }
                 };
-        
+
                 peerConnection.addEventListener("signalingstatechange", signalingStateListener);
             }
             break;
         }
         case "reqice": {
             console.log("Request for ICE candidates received:", message.data);
-        
+
             // Listen for local ICE candidates on the peer connection
             peerConnection.onicecandidate = function (event) {
                 // if (event.candidate) {
-                    console.log("New ICE candidate:", event.candidate);
-        
-                    // Send the ICE candidate to the remote peer
-                    var candidateMessage = {
-                        type: "candidate",
-                        data: JSON.stringify(event.candidate)
-                    };
-        
-                    ws.send(JSON.stringify(candidateMessage));
+                console.log("New ICE candidate:", event.candidate);
+
+                // Send the ICE candidate to the remote peer
+                var candidateMessage = {
+                    type: "candidate",
+                    data: JSON.stringify(event.candidate)
+                };
+
+                ws.send(JSON.stringify(candidateMessage));
                 // }
             };
             break;

@@ -8,6 +8,7 @@ require (
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/pion/datachannel v1.5.6 // indirect
 	github.com/pion/dtls/v2 v2.2.10 // indirect
+	github.com/pion/example-webrtc-applications/v3 v3.0.5 // indirect
 	github.com/pion/ice/v2 v2.3.13 // indirect
 	github.com/pion/ice/v3 v3.0.3 // indirect
 	github.com/pion/interceptor v0.1.27 // indirect
