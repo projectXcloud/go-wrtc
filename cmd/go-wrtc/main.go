@@ -4,16 +4,18 @@ import (
 	// "bufio"
 	// "bytes"
 	"encoding/json"
-	"io"
+
+	// "errors"
+	// "io"
 	"log"
+	"net"
 	"net/http"
 	"os/exec"
-	"time"
 
 	"github.com/gorilla/websocket"
 	// "github.com/pion/example-webrtc-applications/blob/v3.0.5/internal/gstreamer-src"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
-	"github.com/pion/webrtc/v4/pkg/media"
 	// "github.com/pion/webrtc/v4/pkg/media"
 	// "github.com/pion/example-webrtc-applications/v3/internal/gstreamer-src"
 	// "github.com/pion/webrtc/v3/examples/internal/gstreamer-src"
@@ -120,7 +122,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			// 	log.Printf("Error creating data channel: %v", err)
 			// 	continue
 			// }
-			audioTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "audio/opus"}, "audio", "pion")
+			audioTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
 			// audioTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: "audio/opus"}, "audio", "pion")
 			if err != nil {
 				log.Printf("error creating audio track: %v", err)
@@ -128,7 +130,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Add the audio track to the peer connection
-			_, err = peerConnection.AddTrack(audioTrack)
+			rtpSender, err := peerConnection.AddTrack(audioTrack)
+			// _, err = peerConnection.AddTrack(audioTrack)
 			if err != nil {
 				log.Printf("error adding audio track: %v", err)
 				continue
@@ -184,29 +187,82 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Connection State has changed %s \n", connectionState.String())
 
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "opus", "-")
-					cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
-					stdoutPipe, err := cmd.StdoutPipe()
+					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
+					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
+					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
+					cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+
+					// Start FFmpeg process
+					// stdout, err := cmd.StdoutPipe()
 					if err != nil {
-						log.Printf("error creating FFmpeg stdout pipe: %v", err)
+						log.Printf("error creating stdout pipe: %v", err)
+						return
 					}
 
+					// Start FFmpeg process
 					if err := cmd.Start(); err != nil {
 						log.Printf("error starting FFmpeg process: %v", err)
+						return
 					}
-					// Use a buffer to read the data in chunks
-					buf := make([]byte, 4096) // Adjust the size as needed
-					// buf2 := make([]byte, 1024) // Adjust the size as needed
-					for {
-						n, err := stdoutPipe.Read(buf)
-						if err != nil {
-							if err == io.EOF {
-								break // End of file is expected for some commands
-							}
-							log.Printf("Error reading from stdout pipe: %v\n", err)
-							break
+
+					// Open a UDP Listener for RTP Packets on port 12345
+					// listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
+					listener, err := net.ListenPacket("udp", "localhost:12345")
+
+					if err != nil {
+						panic(err)
+					}
+
+					// Increase the UDP receive buffer size
+					// Default UDP buffer sizes vary on different operating systems
+					// bufferSize := 40960 // 40KB
+					// err = listener.SetReadBuffer(bufferSize)
+					// if err != nil {
+					// panic(err)
+					// }
+
+					defer func() {
+						if err = listener.Close(); err != nil {
+							panic(err)
 						}
-						audioTrack.WriteSample(media.Sample{Data: buf[:n], Duration: time.Millisecond * 256})
-					}
+					}()
+
+					// Read incoming RTCP packets
+					// Before these packets are returned they are processed by interceptors. For things
+					// like NACK this needs to be called.
+					go func() {
+						rtcpBufRead := make([]byte, 1500)
+						for {
+							if _, _, rtcpErr := rtpSender.Read(rtcpBufRead); rtcpErr != nil {
+								return
+							}
+						}
+					}()
+
+					go func() {
+						// Read incoming RTP packets
+						rtpBuf := make([]byte, 15000)
+						for {
+							n, _, rtpErr := listener.ReadFrom(rtpBuf)
+							if rtpErr != nil {
+								log.Fatal(err)
+							}
+
+							// // Write the RTP packet to the peer
+							// if _, writeErr := audioTrack.Write(rtpBuf); writeErr != nil {
+							// 	return
+							// }
+							packet := &rtp.Packet{}
+							err = packet.Unmarshal(rtpBuf[:n])
+							if err != nil {
+								log.Println("Failed to parse RTP packet:", err)
+								continue
+							}
+							// log.Println("Packet Timestamp", packet.Timestamp)
+							audioTrack.WriteRTP(packet)
+
+						}
+					}()
 
 					// Wait for the command to finish
 					if err := cmd.Wait(); err != nil {
