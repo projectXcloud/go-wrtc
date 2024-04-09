@@ -10,8 +10,8 @@ func main() {
 	fs := http.FileServer(http.Dir("./go-web-tbdl"))
 	http.Handle("/", noCache(fs))
 
-	log.Printf("Starting server on http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
+	log.Printf("Starting server on http://localhost:8000")
+	err := http.ListenAndServe(":8000", nil)
 	if err != nil {
 		log.Fatal(err)
 	}

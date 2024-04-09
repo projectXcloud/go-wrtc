@@ -1,6 +1,17 @@
 
-var ws = new WebSocket("ws://localhost:6080/ws");
-var peerConnection = new RTCPeerConnection();
+var host = window.location.host.split(':')[0];
+var ws = new WebSocket(`ws://${host}:6080/ws`);
+var peerConnection = new RTCPeerConnection(
+    {
+        iceServers: [
+            {
+                urls: "turn:freeturn.net:3478",
+                username: "free",
+                credential: "free"
+            }
+        ]
+    }
+);
 // Temporarily make it accessible globally for debugging:
 window.myPeerConnection = peerConnection
 
