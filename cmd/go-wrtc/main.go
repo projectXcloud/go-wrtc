@@ -150,15 +150,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
-					//cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+					// cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
 					cmd := exec.Command("ffmpeg", "-f", "pulse", "-i", "default", "-preset", "ultrafast", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
-
-					// Start FFmpeg process
-					// stdout, err := cmd.StdoutPipe()
-					if err != nil {
-						log.Printf("error creating stdout pipe: %v", err)
-						return
-					}
 
 					// Start FFmpeg process
 					if err := cmd.Start(); err != nil {
@@ -173,14 +166,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						panic(err)
 					}
-
-					// Increase the UDP receive buffer size
-					// Default UDP buffer sizes vary on different operating systems
-					// bufferSize := 40960 // 40KB
-					// err = listener.SetReadBuffer(bufferSize)
-					// if err != nil {
-					// panic(err)
-					// }
 
 					defer func() {
 						if err = listener.Close(); err != nil {
