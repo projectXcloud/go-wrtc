@@ -37,14 +37,19 @@ ws.onmessage = function (event) {
                 // Once the remote description is set, create an answer
                 console.log(peerConnection.remoteDescription, 11112222)
 
-                peerConnection.ontrack = function (event) {
-                    console.log("Received remote track:", event.streams[0]);
-                    var remoteStream = new MediaStream();
-                    remoteStream.addTrack(event.track[0]);
-                    var audioElement = document.createElement("audio");
-                    audioElement.srcObject = remoteStream;
-                    audioElement.play();
-                };
+                // peerConnection.ontrack = function (event) {
+                    
+                //     console.log("Received remote track:", event.streams[0]);
+                //     var remoteStream = new MediaStream();
+                //     // event.streams[0].getTracks().forEach(track => {
+                //     //     console.log("track ::", track)
+                //     //     remoteStream.addTrack(track);
+                //     // })
+                //     // remoteStream.addTrack(event.track[0]);
+                //     var audioElement = document.createElement("audio");
+                //     audioElement.srcObject = remoteStream;
+                //     audioElement.play();
+                // };
                 window.myPeerConnection.getTransceivers().forEach(t => {
                     console.log(`Transceiver mid=${t.mid}, kind=${t.receiver.track.kind}, trackId=${t.receiver.track.id}, trackEnabled=${t.receiver.track.enabled}`);
                     // Check if the track is audio or video and select the appropriate element
@@ -56,6 +61,7 @@ ws.onmessage = function (event) {
                     }
 
                     if (mediaElement) {
+                        console.log(t.receiver.track, 5555)
                         // Attach the track to the media element
                         const stream = new MediaStream([t.receiver.track]);
                         mediaElement.srcObject = stream;

@@ -22,6 +22,29 @@ var upgrader = websocket.Upgrader{
 		return true // Adjust the origin check as needed
 	},
 }
+var cmd *exec.Cmd
+var listener net.PacketConn
+
+func init() {
+	cmd = exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+	// cmd = exec.Command("ffmpeg", "-f", "pulse", "-i", "default", "-preset", "ultrafast", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+
+	// Start FFmpeg process
+	if err := cmd.Start(); err != nil {
+		log.Printf("error starting FFmpeg process: %v", err)
+		return
+	}
+
+	// Open a UDP Listener for RTP Packets on port 12345
+	// listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
+	var err error
+	listener, err = net.ListenPacket("udp", "localhost:12345")
+
+	if err != nil {
+		panic(err)
+	}
+
+}
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -150,28 +173,28 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
-					// cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
-					cmd := exec.Command("ffmpeg", "-f", "pulse", "-i", "default", "-preset", "ultrafast", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+					// // cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+					// cmd := exec.Command("ffmpeg", "-f", "pulse", "-i", "default", "-preset", "ultrafast", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
 
-					// Start FFmpeg process
-					if err := cmd.Start(); err != nil {
-						log.Printf("error starting FFmpeg process: %v", err)
-						return
-					}
+					// // Start FFmpeg process
+					// if err := cmd.Start(); err != nil {
+					// 	log.Printf("error starting FFmpeg process: %v", err)
+					// 	return
+					// }
 
-					// Open a UDP Listener for RTP Packets on port 12345
-					// listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
-					listener, err := net.ListenPacket("udp", "localhost:12345")
+					// // Open a UDP Listener for RTP Packets on port 12345
+					// // listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
+					// listener, err := net.ListenPacket("udp", "localhost:12345")
 
-					if err != nil {
-						panic(err)
-					}
+					// if err != nil {
+					// 	panic(err)
+					// }
 
-					defer func() {
-						if err = listener.Close(); err != nil {
-							panic(err)
-						}
-					}()
+					// defer func() {
+					// 	if err = listener.Close(); err != nil {
+					// 		panic(err)
+					// 	}
+					// }()
 
 					// Read incoming RTCP packets
 					// Before these packets are returned they are processed by interceptors. For things
@@ -191,7 +214,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 						for {
 							n, _, rtpErr := listener.ReadFrom(rtpBuf)
 							if rtpErr != nil {
-								log.Fatal(err)
+								log.Fatal("Listener Error ", rtpErr)
 							}
 
 							// // Write the RTP packet to the peer
@@ -210,10 +233,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 						}
 					}()
 
-					// Wait for the command to finish
+					// // Wait for the command to finish
 					if err := cmd.Wait(); err != nil {
 						log.Printf("Command finished with error: %v\n", err)
 					}
+					// for {
+					// 	time.Sleep(10 * time.Second)
+					// }
 				}
 			})
 
@@ -311,4 +337,10 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+
+	defer func() {
+		if err = listener.Close(); err != nil {
+			panic(err)
+		}
+	}()
 }
