@@ -173,18 +173,24 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
 					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
-					// // cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
-					// cmd := exec.Command("ffmpeg", "-f", "pulse", "-i", "default", "-preset", "ultrafast", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+					cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
 
-					// // Start FFmpeg process
-					// if err := cmd.Start(); err != nil {
-					// 	log.Printf("error starting FFmpeg process: %v", err)
-					// 	return
-					// }
+					// Start FFmpeg process
+					// stdout, err := cmd.StdoutPipe()
+					if err != nil {
+						log.Printf("error creating stdout pipe: %v", err)
+						return
+					}
 
-					// // Open a UDP Listener for RTP Packets on port 12345
-					// // listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
-					// listener, err := net.ListenPacket("udp", "localhost:12345")
+					// Start FFmpeg process
+					if err := cmd.Start(); err != nil {
+						log.Printf("error starting FFmpeg process: %v", err)
+						return
+					}
+
+					// Open a UDP Listener for RTP Packets on port 12345
+					// listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
+					listener, err := net.ListenPacket("udp", "localhost:12345")
 
 					// if err != nil {
 					// 	panic(err)
@@ -217,17 +223,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 								log.Fatal("Listener Error ", rtpErr)
 							}
 
-							// // Write the RTP packet to the peer
-							// if _, writeErr := audioTrack.Write(rtpBuf); writeErr != nil {
-							// 	return
-							// }
+							// Write the RTP packet to the peer
 							packet := &rtp.Packet{}
 							err = packet.Unmarshal(rtpBuf[:n])
 							if err != nil {
 								log.Println("Failed to parse RTP packet:", err)
 								continue
 							}
-							// log.Println("Packet Timestamp", packet.Timestamp)
 							audioTrack.WriteRTP(packet)
 
 						}
@@ -253,8 +255,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				log.Printf("error unmarshaling answer: %v", err)
 				continue
 			}
-			// //log.Println(peerConnection.LocalDescription())
-			//log.Println("111", answer)
 			// Use the unmarshaled session description
 			err = peerConnection.SetRemoteDescription(answer)
 			if err != nil {
@@ -292,8 +292,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			//log.Println("Added ICE candidate")
 		} else if msg.Type == "reqice" {
 			// Handle ICE candidates
-			//log.Println(1111, peerConnection.LocalDescription())
-			//log.Println("\n\n\n", peerConnection.RemoteDescription())
 			peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
 				if c == nil {
 					// All ICE candidates have been gathered
@@ -327,6 +325,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+
+	// Start FFmpeg process
+	if err := cmd.Start(); err != nil {
+		log.Printf("error starting FFmpeg process: %v", err)
+		return
+	}
 
 	// Configure websocket route
 	http.HandleFunc("/ws", handleConnections)
