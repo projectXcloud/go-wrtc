@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/rtp"
@@ -195,11 +194,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 						}
 					}()
-
-					// TODO: Why do we even need this?
-					for {
-						time.Sleep(10 * time.Second)
-					}
 				}
 			})
 
