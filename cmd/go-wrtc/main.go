@@ -28,8 +28,8 @@ var listener net.PacketConn
 var audioTrack *webrtc.TrackLocalStaticRTP
 
 func init() {
+	// FFmpeg command to start RTP stream
 	cmd = exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
-	// cmd = exec.Command("ffmpeg", "-f", "pulse", "-i", "default", "-preset", "ultrafast", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
 
 	// Start FFmpeg process
 	if err := cmd.Start(); err != nil {
@@ -37,15 +37,16 @@ func init() {
 		return
 	}
 
-	// Open a UDP Listener for RTP Packets on port 12345
-	// listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
 	var err error
+
+	// Open a UDP Listener for RTP Packets on port 12345
 	listener, err = net.ListenPacket("udp", "localhost:12345")
 
 	if err != nil {
 		panic(err)
 	}
 
+	// Create a new and persisting audio track
 	audioTrack, err = webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
 
 	if err != nil {
@@ -61,7 +62,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	//log.Println("New client connected")
+	// log.Println("New client connected")
 
 	// Create a new RTCPeerConnection
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
@@ -105,23 +106,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		// if TYPE == Initiation then create and send offer
 		if msg.Type == "Initiation" {
-			// Example: Creating a data channel to simulate adding a "track"
-			// In practice, here you would start your FFmpeg process and prepare your RTPSender
-
-			// _, err := peerConnection.CreateDataChannel("audio", nil)
-			// if err != nil {
-			// 	log.Printf("Error creating data channel: %v", err)
-			// 	continue
-			// }
-			//audioTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
-			// audioTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: "audio/opus"}, "audio", "pion")
-			/*
-				if err != nil {
-					log.Printf("error creating audio track: %v", err)
-					continue
-				}
-			*/
-
 			// Add the audio track to the peer connection
 			rtpSender, err := peerConnection.AddTrack(audioTrack)
 			// _, err = peerConnection.AddTrack(audioTrack)
@@ -138,11 +122,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				log.Printf("error creating offer: %v", err)
 				continue
 			}
-			//log.Println("11", offer)
+			// log.Println("11", offer)
 
 			// Set the local description to the offer
 			err = peerConnection.SetLocalDescription(offer)
-			// //log.Println(peerConnection.LocalDescription())
+			// log.Println(peerConnection.LocalDescription())
 			if err != nil {
 				log.Printf("error setting local description: %v", err)
 				continue
@@ -179,42 +163,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				if connectionState == webrtc.PeerConnectionStateConnected {
 					log.Printf("Connection State has changed %s \n", connectionState.String())
 
-					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "opus", "-")
-					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "pcm_s16le", "-b:a", "128k", "-f", "s16le", "-")
-					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
-					// cmd := exec.Command("ffmpeg", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345")
-					// cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
-
-					/*
-							// Start FFmpeg process
-							// stdout, err := cmd.StdoutPipe()
-							if err != nil {
-								log.Printf("error creating stdout pipe: %v", err)
-								return
-							}
-
-							// Start FFmpeg process
-							if err := cmd.Start(); err != nil {
-								log.Printf("error starting FFmpeg process: %v", err)
-								return
-							}
-
-
-						// Open a UDP Listener for RTP Packets on port 12345
-						// listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 12345})
-						listener, err := net.ListenPacket("udp", "localhost:12345")
-					*/
-
-					// if err != nil {
-					// 	panic(err)
-					// }
-
-					// defer func() {
-					// 	if err = listener.Close(); err != nil {
-					// 		panic(err)
-					// 	}
-					// }()
-
 					// Read incoming RTCP packets
 					// Before these packets are returned they are processed by interceptors. For things
 					// like NACK this needs to be called.
@@ -247,12 +195,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 						}
 					}()
-					/*
-						// Wait for the command to finish
-						if err := cmd.Wait(); err != nil {
-							log.Printf("Command finished with error: %v\n", err)
-						}
-					*/
+
+					// TODO: Why do we even need this?
 					for {
 						time.Sleep(10 * time.Second)
 					}
@@ -291,7 +235,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		} else if msg.Type == "candidate" {
 			var candidate webrtc.ICECandidateInit
-			//log.Println("Received ICE candidate:", msg.Data)
+			// log.Println("Received ICE candidate:", msg.Data)
 			if err := json.Unmarshal([]byte(msg.Data), &candidate); err != nil {
 				log.Printf("error unmarshalling candidate: %v", err)
 				return
@@ -303,7 +247,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			//log.Println("Added ICE candidate")
+			// log.Println("Added ICE candidate")
 		} else if msg.Type == "reqice" {
 			// Handle ICE candidates
 			peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
@@ -339,21 +283,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	/*
-		cmd := exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
-
-		// Start FFmpeg process
-		if err := cmd.Start(); err != nil {
-			log.Printf("error starting FFmpeg process: %v", err)
-			return
-		}
-	*/
-
 	// Configure websocket route
 	http.HandleFunc("/ws", handleConnections)
 
-	// Start the server on localhost port 8000 and log any errors
-	//log.Println("http server started on :6080")
+	// Start the server on localhost port 6080 and log any errors
 	err := http.ListenAndServe(":6080", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
