@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/rtp"
@@ -29,7 +28,8 @@ var audioTrack *webrtc.TrackLocalStaticRTP
 
 func init() {
 	// FFmpeg command to start RTP stream
-	cmd = exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+	// cmd = exec.Command("ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
+	cmd = exec.Command("ffmpeg", "-re", "-f", "pulse", "-i", "default", "-acodec", "libopus", "-b:a", "128k", "-f", "rtp", "rtp://127.0.0.1:12345", "-tune", "zerolatency")
 
 	// Start FFmpeg process
 	if err := cmd.Start(); err != nil {
@@ -76,6 +76,15 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				Credential:     "free",
 				CredentialType: webrtc.ICECredentialTypePassword,
 			},
+			// {
+			// 	URLs: []string{"stun:stun.bishal.pro:3478"},
+			// },
+			// {
+			// 	URLs:           []string{"turn:turn.bishal.pro:3478"},
+			// 	Username:       "turn",
+			// 	Credential:     "turn123",
+			// 	CredentialType: webrtc.ICECredentialTypePassword,
+			// },
 		},
 	})
 	if err != nil {
@@ -196,10 +205,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 						}
 					}()
 
-					// TODO: Why do we even need this?
-					for {
-						time.Sleep(10 * time.Second)
-					}
+					// // TODO: Why do we even need this?
+					// for {
+					// 	time.Sleep(10 * time.Second)
+					// }
+					// cmd.Wait()
 				}
 			})
 
