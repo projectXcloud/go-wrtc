@@ -204,12 +204,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 						}
 					}()
-
-					// // TODO: Why do we even need this?
-					// for {
-					// 	time.Sleep(10 * time.Second)
-					// }
-					// cmd.Wait()
 				}
 			})
 
