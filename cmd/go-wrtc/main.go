@@ -134,23 +134,40 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 		readRTCPPackets(ctx, rtpSender)
 	}()
 
+	// Buffered ICE candidates.
+	var iceCandidates []webrtc.ICECandidateInit
+	var sendCandidates bool = false // Flag indicating whether we have received "reqice" from client
+
 	// Handle ICE candidates.
 	peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c == nil {
 			// All ICE candidates have been sent.
 			return
 		}
-		// Send the ICE candidate to the client.
+		// Marshal the candidate.
 		candidate, err := json.Marshal(c.ToJSON())
 		if err != nil {
 			log.Println("ICE Candidate Marshal Error:", err)
 			return
 		}
-		msg := Message{
-			Type: "candidate",
-			Data: string(candidate),
+		// Create a candidate message.
+		iceCandidate := webrtc.ICECandidateInit{}
+		if err := json.Unmarshal(candidate, &iceCandidate); err != nil {
+			log.Println("ICE Candidate Unmarshal Error:", err)
+			return
 		}
-		sendWebSocketMessage(ws, msg)
+
+		// If we have received "reqice", send the candidate immediately.
+		if sendCandidates {
+			msg := Message{
+				Type: "candidate",
+				Data: string(candidate),
+			}
+			sendWebSocketMessage(ws, msg)
+		} else {
+			// Buffer the ICE candidate.
+			iceCandidates = append(iceCandidates, iceCandidate)
+		}
 	})
 
 	// Handle the peer connection state changes.
@@ -188,7 +205,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 			}
 		case "answer":
 			// Set the remote description with the answer.
-			if err := handleAnswer(peerConnection, msg.Data); err != nil {
+			if err := handleAnswer(peerConnection, msg.Data, ws); err != nil {
 				log.Println("Handle Answer Error:", err)
 				return
 			}
@@ -198,6 +215,24 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 				log.Println("Handle Candidate Error:", err)
 				return
 			}
+		case "reqice":
+			// Start sending ICE candidates
+			sendCandidates = true
+			// Send all buffered ICE candidates
+			for _, candidate := range iceCandidates {
+				candidateJSON, err := json.Marshal(candidate)
+				if err != nil {
+					log.Println("ICE Candidate Marshal Error:", err)
+					continue
+				}
+				msg := Message{
+					Type: "candidate",
+					Data: string(candidateJSON),
+				}
+				sendWebSocketMessage(ws, msg)
+			}
+			// Clear the buffer
+			iceCandidates = nil
 		default:
 			log.Println("Unknown message type:", msg.Type)
 		}
@@ -316,16 +351,29 @@ func handleInitiation(ws *websocket.Conn, peerConnection *webrtc.PeerConnection)
 		Data: string(offerSDP),
 	}
 
-	return sendWebSocketMessage(ws, msg)
+	if err := sendWebSocketMessage(ws, msg); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // handleAnswer sets the remote description with the client's answer.
-func handleAnswer(peerConnection *webrtc.PeerConnection, data string) error {
+func handleAnswer(peerConnection *webrtc.PeerConnection, data string, ws *websocket.Conn) error {
 	var answer webrtc.SessionDescription
 	if err := json.Unmarshal([]byte(data), &answer); err != nil {
 		return err
 	}
-	return peerConnection.SetRemoteDescription(answer)
+	if err := peerConnection.SetRemoteDescription(answer); err != nil {
+		return err
+	}
+
+	// Send "reqice" message to the client indicating we are ready to receive ICE candidates
+	msg := Message{
+		Type: "reqice",
+		Data: "",
+	}
+	return sendWebSocketMessage(ws, msg)
 }
 
 // handleCandidate adds an ICE candidate to the peer connection.
