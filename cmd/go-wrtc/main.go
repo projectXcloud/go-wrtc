@@ -272,8 +272,20 @@ func newPeerConnection() (*webrtc.PeerConnection, error) {
 		ICEServers: iceServers,
 	}
 
-	// Create the PeerConnection.
-	return webrtc.NewPeerConnection(config)
+	// Create a SettingEngine to configure advanced settings.
+	settingEngine := webrtc.SettingEngine{}
+
+	// Set the UDP port range to a single port: 50000.
+	err := settingEngine.SetEphemeralUDPPortRange(50000, 50000)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new API with the SettingEngine.
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+
+	// Create the PeerConnection using the API.
+	return api.NewPeerConnection(config)
 }
 
 // handleInitiation handles the initiation message and sends an offer.
