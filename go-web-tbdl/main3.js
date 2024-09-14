@@ -3,22 +3,22 @@ var ws = new WebSocket("ws://localhost:6080/ws");
 // var ws = new WebSocket("ws://34.100.249.50:6080/ws");
 var peerConnection = new RTCPeerConnection({
     iceServers: [
-        // {
-        //     urls: "stun:freeturn.net:3478"
-        // },
-        // {
-        //     urls: "turn:freeturn.net:3478",
-        //     username: "free",
-        //     credential: "free"
-        // },
         {
-            urls: "stun:stun.bishal.pro:3478"
+            urls: "stun:freeturn.net:3478"
         },
         {
-            urls: "turn:turn.bishal.pro:3478",
-            username: "turn",
-            credential: "turn123"
+            urls: "turn:freeturn.net:3478",
+            username: "free",
+            credential: "free"
         },
+        // {
+        //     urls: "stun:stun.bishal.pro:3478"
+        // },
+        // {
+        //     urls: "turn:turn.bishal.pro:3478",
+        //     username: "turn",
+        //     credential: "turn123"
+        // },
     ]
 });
 // Temporarily make it accessible globally for debugging:

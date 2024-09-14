@@ -32,6 +32,7 @@ var upgrader = websocket.Upgrader{
 			"http://yourdomain.com", // Replace with your actual domain
 			"http://localhost:8000", // Allow localhost (default port from web.go)
 			"http://127.0.0.1:8000", // Allow localhost via IP
+			"http://0.0.0.0:8000",   // Allow localhost via IP
 		}
 
 		for _, ao := range allowedOrigins {

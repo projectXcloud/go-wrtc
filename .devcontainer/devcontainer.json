@@ -1,0 +1,24 @@
+{
+    "name": "Go WebRTC Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".",
+        "args": {
+            "VARIANT": "1.20"
+        }
+    },
+    "settings": {},
+    "extensions": [
+        "golang.Go",
+        "ms-vscode.cpptools"
+    ],
+    // "postStartCommand": "dbus-daemon --session --address=${DBUS_SESSION_BUS_ADDRESS} & sleep 5 & pulseaudio --start --exit-idle-time=-1 & sleep 5 & pacmd load-module module-null-sink sink_name=infinitySink",
+    "postStartCommand": "/bin/bash /workspaces/go-wrtc/.devcontainer/start-services.sh ",
+    "remoteUser": "vscode",
+    "forwardPorts": [8000, 50000, 6080],
+    "runArgs": [
+        "--publish", "8000:8000",
+        "--publish", "50000:50000",
+        "--publish", "6080:6080"
+    ]
+}
