@@ -8,4 +8,4 @@ build:
 	go build -o ./build/go-wrtc ./cmd/go-wrtc/main.go 
 
 runweb:
-	go run ./go-web-tbdl/web.go
+	go run ./go-web-test/web.go

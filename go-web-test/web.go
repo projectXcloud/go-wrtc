@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	fs := http.FileServer(http.Dir("./go-web-tbdl"))
+	fs := http.FileServer(http.Dir("./go-web-test"))
 	http.Handle("/", noCache(fs))
 
 	log.Printf("Starting server on http://localhost:8000")
