@@ -1,4 +1,4 @@
-module example.com/m/v2
+module github.com/ProjectXcloud/go-wrtc
 
 go 1.23
 
