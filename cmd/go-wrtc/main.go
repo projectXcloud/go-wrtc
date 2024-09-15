@@ -25,23 +25,9 @@ type Message struct {
 
 // upgrader upgrades HTTP connections to WebSocket connections.
 var upgrader = websocket.Upgrader{
-	// Implement proper origin checks to enhance security.
+	// Allow all origins (not recommended for production)
 	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		allowedOrigins := []string{
-			"http://yourdomain.com", // Replace with your actual domain
-			"http://localhost:8000", // Allow localhost (default port from web.go)
-			"http://127.0.0.1:8000", // Allow localhost via IP
-			"http://0.0.0.0:8000",   // Allow localhost via IP
-		}
-
-		for _, ao := range allowedOrigins {
-			if origin == ao {
-				return true
-			}
-		}
-		log.Printf("Rejected connection from origin: %s", origin)
-		return false
+		return true
 	},
 }
 
