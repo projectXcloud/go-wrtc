@@ -166,12 +166,12 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 		} else {
 			// Buffer the ICE candidate.
 			log.Printf("Buffering ICE candidate: %s", string(candidate))
-			iceCandidates = append(iceCandidates, webrtc.ICECandidateInit{})
-			if err := json.Unmarshal(candidate, &iceCandidates[len(iceCandidates)-1]); err != nil {
+			var init webrtc.ICECandidateInit
+			if err := json.Unmarshal(candidate, &init); err != nil {
 				log.Println("ICE Candidate Unmarshal Error:", err)
-				iceCandidates = iceCandidates[:len(iceCandidates)-1]
 				return
 			}
+			iceCandidates = append(iceCandidates, init)
 		}
 	})
 
@@ -276,8 +276,11 @@ func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 			"-stream_loop", "-1",
 			"-i", "file2.mp3",
 			"-acodec", "libopus",
+			"-ar", "48000", // Set sample rate to 48kHz
+			"-ac", "2", // Set number of channels to 2 (stereo)
 			"-b:a", "128k",
 			"-application", "audio", // Ensures Opus is in audio mode
+			"-payload_type", "111", // Explicitly set payload type to 111
 			"-f", "rtp",
 			"rtp://"+address,
 			"-tune", "zerolatency",
@@ -290,8 +293,11 @@ func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 			"-f", "pulse",
 			"-i", "default",
 			"-acodec", "libopus",
+			"-ar", "48000", // Set sample rate to 48kHz
+			"-ac", "2", // Set number of channels to 2 (stereo)
 			"-b:a", "128k",
 			"-application", "audio", // Ensures Opus is in audio mode
+			"-payload_type", "111", // Explicitly set payload type to 111
 			"-f", "rtp",
 			"rtp://"+address,
 			"-tune", "zerolatency",
@@ -326,7 +332,7 @@ func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 // newPeerConnection creates a new WebRTC PeerConnection with a configured MediaEngine.
 func newPeerConnection() (*webrtc.PeerConnection, error) {
 
-	turnURL := "TURN:freeturn.net:3478"
+	turnURL := "turn:freeturn.net:3478" // Changed to lowercase 'turn:'
 	turnUsername := "free"
 	turnCredential := "free"
 
@@ -360,19 +366,31 @@ func newPeerConnection() (*webrtc.PeerConnection, error) {
 		webrtc.WithSettingEngine(settingEngine),
 	)
 
+	// Configure ICE servers.
+	iceServers := []webrtc.ICEServer{
+		{
+			URLs: []string{"stun:stun.l.google.com:19302"},
+		},
+	}
+
+	// Hardcoded TURN server configuration
+	if turnURL != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       []string{turnURL},
+			Username:   turnUsername,
+			Credential: turnCredential,
+		})
+	}
+
+	// Log ICE server configurations
+	for _, server := range iceServers {
+		log.Printf("Configured ICE Server: %v", server.URLs)
+	}
+
 	// Create the PeerConnection using the API.
 	return api.NewPeerConnection(webrtc.Configuration{
 		ICETransportPolicy: webrtc.ICETransportPolicyAll,
-		ICEServers: []webrtc.ICEServer{
-			{
-				URLs: []string{"stun:stun.l.google.com:19302"},
-			},
-			{
-				URLs:       []string{turnURL},
-				Username:   turnUsername,
-				Credential: turnCredential,
-			},
-		},
+		ICEServers:         iceServers,
 	})
 }
 
@@ -453,7 +471,7 @@ func sendWebSocketMessage(ws *websocket.Conn, msg Message) error {
 
 // readRTPPackets reads RTP packets from the listener and writes them to the audio track.
 func readRTPPackets(ctx context.Context, listener net.PacketConn, audioTrack *webrtc.TrackLocalStaticRTP) {
-	buffer := make([]byte, 1500) // Typical MTU size
+	buffer := make([]byte, 2048) // Increased buffer size for safety
 	for {
 		select {
 		case <-ctx.Done():
