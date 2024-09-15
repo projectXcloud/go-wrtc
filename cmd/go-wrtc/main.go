@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -8,7 +9,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
 	"sync"
 
@@ -90,7 +90,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 		if err := ffmpegCmd.Process.Kill(); err != nil {
 			log.Println("FFmpeg Process Kill Error:", err)
 		}
-		listener.Close()
 	}()
 
 	// Create a new PeerConnection per client.
@@ -118,14 +117,18 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 		return
 	}
 
+	log.Println("Audio track added to PeerConnection")
+
 	// Use a WaitGroup to wait for goroutines to finish.
 	var wg sync.WaitGroup
 
-	// Start reading RTP packets and sending them to the audio track.
+	// Start reading RTP packets from FFmpeg and sending them to the audio track.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		log.Println("Starting RTP packet reading")
 		readRTPPackets(ctx, listener, audioTrack)
+		log.Println("RTP packet reading stopped")
 	}()
 
 	// Start reading RTCP packets (for feedback like NACK).
@@ -151,12 +154,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 			log.Println("ICE Candidate Marshal Error:", err)
 			return
 		}
-		// Create a candidate message.
-		iceCandidate := webrtc.ICECandidateInit{}
-		if err := json.Unmarshal(candidate, &iceCandidate); err != nil {
-			log.Println("ICE Candidate Unmarshal Error:", err)
-			return
-		}
 
 		// If we have received "reqice", send the candidate immediately.
 		if sendCandidates {
@@ -164,10 +161,17 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 				Type: "candidate",
 				Data: string(candidate),
 			}
+			log.Printf("Sending ICE candidate: %s", string(candidate))
 			sendWebSocketMessage(ws, msg)
 		} else {
 			// Buffer the ICE candidate.
-			iceCandidates = append(iceCandidates, iceCandidate)
+			log.Printf("Buffering ICE candidate: %s", string(candidate))
+			iceCandidates = append(iceCandidates, webrtc.ICECandidateInit{})
+			if err := json.Unmarshal(candidate, &iceCandidates[len(iceCandidates)-1]); err != nil {
+				log.Println("ICE Candidate Unmarshal Error:", err)
+				iceCandidates = iceCandidates[:len(iceCandidates)-1]
+				return
+			}
 		}
 	})
 
@@ -196,28 +200,34 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 			continue
 		}
 
+		log.Printf("Received WebSocket message: Type=%s, Data=%s", msg.Type, msg.Data)
+
 		// Handle the signaling messages.
 		switch msg.Type {
 		case "Initiation":
 			// Create and send the offer.
+			log.Println("Handling Initiation message")
 			if err := handleInitiation(ws, peerConnection); err != nil {
 				log.Println("Handle Initiation Error:", err)
 				return
 			}
 		case "answer":
 			// Set the remote description with the answer.
+			log.Println("Handling answer message")
 			if err := handleAnswer(peerConnection, msg.Data, ws); err != nil {
 				log.Println("Handle Answer Error:", err)
 				return
 			}
 		case "candidate":
 			// Add the ICE candidate.
+			log.Println("Handling candidate message")
 			if err := handleCandidate(peerConnection, msg.Data); err != nil {
 				log.Println("Handle Candidate Error:", err)
 				return
 			}
 		case "reqice":
 			// Start sending ICE candidates
+			log.Println("Handling reqice message")
 			sendCandidates = true
 			// Send all buffered ICE candidates
 			for _, candidate := range iceCandidates {
@@ -230,6 +240,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 					Type: "candidate",
 					Data: string(candidateJSON),
 				}
+				log.Printf("Sending buffered ICE candidate: %s", string(candidateJSON))
 				sendWebSocketMessage(ws, msg)
 			}
 			// Clear the buffer
@@ -241,9 +252,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 
 	// Wait for goroutines to finish.
 	wg.Wait()
+	log.Println("Connection handling completed")
 }
 
-// startFFmpeg starts the FFmpeg process and returns the command and listener.
+// startFFmpeg starts the FFmpeg process and returns the command and UDP listener.
 func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 	// Create a UDP listener on a random port.
 	listener, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -257,19 +269,39 @@ func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 	// Construct the FFmpeg command based on the mode.
 	var cmd *exec.Cmd
 	if testMode {
-		// FFmpeg command to stream an MP3 file in real-time.
+		// FFmpeg command to stream an MP3 file in real-time via RTP.
 		cmd = exec.Command(
-			"ffmpeg", "-re", "-stream_loop", "-1", "-i", "file2.mp3",
-			"-acodec", "libopus", "-b:a", "128k",
-			"-f", "rtp", "rtp://"+address, "-tune", "zerolatency",
+			"ffmpeg",
+			"-re",
+			"-stream_loop", "-1",
+			"-i", "file2.mp3",
+			"-acodec", "libopus",
+			"-b:a", "128k",
+			"-application", "audio", // Ensures Opus is in audio mode
+			"-f", "rtp",
+			"rtp://"+address,
+			"-tune", "zerolatency",
 		)
 	} else {
-		// FFmpeg command to start RTP stream from PulseAudio.
+		// FFmpeg command to capture audio from PulseAudio and stream Opus via RTP.
 		cmd = exec.Command(
-			"ffmpeg", "-re", "-f", "pulse", "-i", "default",
-			"-acodec", "libopus", "-b:a", "128k",
-			"-f", "rtp", "rtp://"+address, "-tune", "zerolatency",
+			"ffmpeg",
+			"-re",
+			"-f", "pulse",
+			"-i", "default",
+			"-acodec", "libopus",
+			"-b:a", "128k",
+			"-application", "audio", // Ensures Opus is in audio mode
+			"-f", "rtp",
+			"rtp://"+address,
+			"-tune", "zerolatency",
 		)
+	}
+
+	// Get the stderr pipe for logging.
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Start the FFmpeg process.
@@ -277,51 +309,71 @@ func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 		return nil, nil, err
 	}
 
+	// Log FFmpeg's stderr in a separate goroutine.
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			log.Printf("FFmpeg STDERR: %s", scanner.Text())
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("Error reading FFmpeg stderr: %v", err)
+		}
+	}()
+
 	return cmd, listener, nil
 }
 
-// newPeerConnection creates a new WebRTC PeerConnection.
+// newPeerConnection creates a new WebRTC PeerConnection with a configured MediaEngine.
 func newPeerConnection() (*webrtc.PeerConnection, error) {
-	// Load TURN server credentials from environment variables.
-	turnURL := os.Getenv("TURN_URL") // e.g., "turn:yourturnserver.com:3478"
-	turnUsername := os.Getenv("TURN_USERNAME")
-	turnCredential := os.Getenv("TURN_CREDENTIAL")
 
-	// Create the ICE servers configuration.
-	iceServers := []webrtc.ICEServer{
-		{
-			URLs: []string{"stun:stun.l.google.com:19302"},
+	turnURL := "TURN:freeturn.net:3478"
+	turnUsername := "free"
+	turnCredential := "free"
+
+	// Initialize MediaEngine and register Opus codec with payload type 111.
+	mediaEngine := webrtc.MediaEngine{}
+	err := mediaEngine.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeOpus,
+			ClockRate:   48000,
+			Channels:    2,
+			SDPFmtpLine: "minptime=10; useinbandfec=1",
 		},
-	}
-
-	if turnURL != "" {
-		iceServers = append(iceServers, webrtc.ICEServer{
-			URLs:           []string{turnURL},
-			Username:       turnUsername,
-			Credential:     turnCredential,
-			CredentialType: webrtc.ICECredentialTypePassword,
-		})
-	}
-
-	// Create a new PeerConnection configuration.
-	config := webrtc.Configuration{
-		ICEServers: iceServers,
+		PayloadType: 111, // Ensure this matches FFmpeg's payload type for Opus
+	}, webrtc.RTPCodecTypeAudio)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create a SettingEngine to configure advanced settings.
 	settingEngine := webrtc.SettingEngine{}
 
 	// Set the UDP port range to a single port: 50000.
-	err := settingEngine.SetEphemeralUDPPortRange(50000, 50000)
+	err = settingEngine.SetEphemeralUDPPortRange(50000, 50000)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create a new API with the SettingEngine.
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+	// Create a new API with the MediaEngine and SettingEngine.
+	api := webrtc.NewAPI(
+		webrtc.WithMediaEngine(&mediaEngine),
+		webrtc.WithSettingEngine(settingEngine),
+	)
 
 	// Create the PeerConnection using the API.
-	return api.NewPeerConnection(config)
+	return api.NewPeerConnection(webrtc.Configuration{
+		ICETransportPolicy: webrtc.ICETransportPolicyAll,
+		ICEServers: []webrtc.ICEServer{
+			{
+				URLs: []string{"stun:stun.l.google.com:19302"},
+			},
+			{
+				URLs:       []string{turnURL},
+				Username:   turnUsername,
+				Credential: turnCredential,
+			},
+		},
+	})
 }
 
 // handleInitiation handles the initiation message and sends an offer.
@@ -352,6 +404,7 @@ func handleInitiation(ws *websocket.Conn, peerConnection *webrtc.PeerConnection)
 		Data: string(offerSDP),
 	}
 
+	log.Println("Sending SDP offer to client")
 	if err := sendWebSocketMessage(ws, msg); err != nil {
 		return err
 	}
@@ -374,6 +427,7 @@ func handleAnswer(peerConnection *webrtc.PeerConnection, data string, ws *websoc
 		Type: "reqice",
 		Data: "",
 	}
+	log.Println("Sending reqice message to client")
 	return sendWebSocketMessage(ws, msg)
 }
 
@@ -383,6 +437,7 @@ func handleCandidate(peerConnection *webrtc.PeerConnection, data string) error {
 	if err := json.Unmarshal([]byte(data), &candidate); err != nil {
 		return err
 	}
+	log.Printf("Adding ICE candidate: %+v", candidate)
 	return peerConnection.AddICECandidate(candidate)
 }
 
@@ -392,35 +447,42 @@ func sendWebSocketMessage(ws *websocket.Conn, msg Message) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("Sending WebSocket message: Type=%s, Data=%s", msg.Type, msg.Data)
 	return ws.WriteMessage(websocket.TextMessage, msgJSON)
 }
 
 // readRTPPackets reads RTP packets from the listener and writes them to the audio track.
 func readRTPPackets(ctx context.Context, listener net.PacketConn, audioTrack *webrtc.TrackLocalStaticRTP) {
-	rtpBuf := make([]byte, 1500)
+	buffer := make([]byte, 1500) // Typical MTU size
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("readRTPPackets: Context canceled, stopping RTP reading")
 			return
 		default:
-			n, _, err := listener.ReadFrom(rtpBuf)
+			n, addr, err := listener.ReadFrom(buffer)
 			if err != nil {
-				log.Println("RTP Read Error:", err)
+				log.Println("readRTPPackets: ReadFrom Error:", err)
 				return
 			}
 
+			// Log the source of the RTP packet
+			log.Printf("Received RTP packet from %s, size=%d bytes", addr.String(), n)
+
 			// Unmarshal the RTP packet.
 			packet := &rtp.Packet{}
-			if err := packet.Unmarshal(rtpBuf[:n]); err != nil {
-				log.Println("RTP Packet Unmarshal Error:", err)
+			if err := packet.Unmarshal(buffer[:n]); err != nil {
+				log.Println("readRTPPackets: RTP Packet Unmarshal Error:", err)
 				continue
 			}
 
 			// Write the RTP packet to the audio track.
 			if err := audioTrack.WriteRTP(packet); err != nil {
-				log.Println("Audio Track Write Error:", err)
+				log.Println("readRTPPackets: Audio Track Write Error:", err)
 				return
 			}
+
+			log.Printf("Sent RTP packet Seq=%d Timestamp=%d Size=%d bytes", packet.SequenceNumber, packet.Timestamp, len(packet.Payload))
 		}
 	}
 }
@@ -431,14 +493,18 @@ func readRTCPPackets(ctx context.Context, rtpSender *webrtc.RTPSender) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("readRTCPPackets: Context canceled, stopping RTCP reading")
 			return
 		default:
-			if _, _, err := rtpSender.Read(rtcpBuf); err != nil {
+			n, _, err := rtpSender.Read(rtcpBuf)
+			if err != nil {
 				if err != io.EOF {
-					log.Println("RTCP Read Error:", err)
+					log.Println("readRTCPPackets: RTCP Read Error:", err)
 				}
 				return
 			}
+			log.Printf("readRTCPPackets: Received RTCP packet of size %d bytes", n)
+			// Handle RTCP packets as needed
 		}
 	}
 }
