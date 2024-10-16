@@ -20,13 +20,8 @@
     "postStartCommand": "/bin/bash /workspaces/go-wrtc/.devcontainer/start-services.sh ",
     "remoteUser": "vscode",
     "forwardPorts": [3000],
-    // "runArgs": [
-    //     "--publish", "3000:3000"
-    // ]
-    // "runArgs": [
-    //     "--network", "none"  // Optional: This can prevent the container from accessing the host network.
-    // ]
     "runArgs": [
-        "--network", "bridge"  // Optional: This can prevent the container from accessing the host network.
+        "--name", "go_devcontainer",
+        "--network", "bridge"
     ]
 }

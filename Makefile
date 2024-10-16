@@ -12,3 +12,6 @@ build:
 
 runweb:
 	go run ./go-web-test/web.go
+
+devconn:
+	docker exec -it -w /workspaces/go-wrtc go_devcontainer  /bin/bash
