@@ -318,7 +318,7 @@ func startFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 // newPeerConnection creates a new WebRTC PeerConnection with a configured MediaEngine.
 func newPeerConnection() (*webrtc.PeerConnection, error) {
 
-	turnURL := "turn:freeturn.net:3478" // Changed to lowercase 'turn:'
+	turnURL := "turn:freestun.net:3478" // Changed to lowercase 'turn:'
 	turnUsername := "free"
 	turnCredential := "free"
 
@@ -375,7 +375,7 @@ func newPeerConnection() (*webrtc.PeerConnection, error) {
 
 	// Create the PeerConnection using the API.
 	return api.NewPeerConnection(webrtc.Configuration{
-		ICETransportPolicy: webrtc.ICETransportPolicyAll,
+		ICETransportPolicy: webrtc.ICETransportPolicyRelay,
 		ICEServers:         iceServers,
 	})
 }

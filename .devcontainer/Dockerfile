@@ -4,7 +4,7 @@
 ARG VARIANT="1.20"
 FROM mcr.microsoft.com/vscode/devcontainers/go:0-${VARIANT}
 
-# Install necessary packages
+# Install necessary packages including HAProxy and UFW
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         pulseaudio \
@@ -14,7 +14,8 @@ RUN apt-get update && \
         pkg-config \
         ca-certificates \
         dbus \
-        && \
+        haproxy \
+        ufw && \
     rm -rf /var/lib/apt/lists/*
 
 # Generate machine-id for D-Bus
@@ -30,12 +31,26 @@ ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-# Ensure the vscode user exists
+# Ensure the vscode user and group exist, then add to the group if necessary
 RUN id -u $USERNAME &>/dev/null || adduser --uid $USER_UID --disabled-password --gecos "" $USERNAME
+
+# Ensure the group exists before adding the user to it
+RUN getent group $USERNAME || groupadd -g $USER_GID $USERNAME
+RUN usermod -aG $USERNAME $USERNAME
 
 # Set up permissions for PulseAudio and D-Bus
 RUN mkdir -p /run/user/$USER_UID && \
     chown -R $USERNAME:$USERNAME /run/user/$USER_UID
+
+# Backup and remove the default haproxy.cfg
+RUN cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak && \
+    rm /etc/haproxy/haproxy.cfg
+
+# Copy the custom haproxy.cfg from the host into the container
+COPY haproxy.cfg /etc/haproxy/haproxy.cfg
+
+# Set root password to "root"
+RUN echo "root:root" | chpasswd
 
 # Switch to the non-root user
 USER $USERNAME
@@ -48,18 +63,8 @@ ENV DBUS_SESSION_BUS_ADDRESS=unix:path=${XDG_RUNTIME_DIR}/bus
 RUN echo "export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >> /home/${USERNAME}/.bashrc && \
     echo "export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}" >> /home/${USERNAME}/.bashrc
 
-# Expose the necessary ports
-EXPOSE 8000 50000 6080
+# Expose the necessary port
+EXPOSE 3000
 
 # Set the working directory
-WORKDIR /workspace
-
-# # Optional: Install ufw to control ports
-# RUN apt-get update && apt-get install -y ufw && \
-#     ufw default deny incoming && \
-#     ufw default allow outgoing && \
-#     ufw allow 8000 && \
-#     ufw allow 50000 && \
-#     ufw allow 6080 && \
-#     ufw --force enable
-
+WORKDIR /workspaces
