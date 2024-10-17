@@ -1,6 +1,5 @@
 
-var ws = new WebSocket("ws://localhost:6080/ws");
-// var ws = new WebSocket("ws://34.100.249.50:6080/ws");
+var ws = new WebSocket("ws://localhost:3000/ws");
 var peerConnection = new RTCPeerConnection({
     iceTransportPolicy: "relay",
     iceServers: [

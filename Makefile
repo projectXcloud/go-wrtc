@@ -1,17 +1,20 @@
 .PHONY: build
 
-run:
+run r:
 	go run ./cmd/go-wrtc/main.go
 
-runt:
+runt rt:
 	go run ./cmd/go-wrtc/main.go -t
 
-build:
+build b:
 	mkdir -p ./build
 	go build -o ./build/go-wrtc ./cmd/go-wrtc/main.go 
 
-runweb:
+runweb rw:
 	go run ./go-web-test/web.go
 
-devconn:
+devconn c:
 	docker exec -it -w /workspaces/go-wrtc go_devcontainer  /bin/bash
+
+devconncomp cc:
+	docker exec -it -w /workspaces/go-wrtc go_devcontainer_compose  /bin/bash

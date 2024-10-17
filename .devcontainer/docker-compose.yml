@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  go_wrtc:
+    container_name: go_devcontainer_compose
+    build:
+      context: .   # Make sure this points to the directory where Dockerfile is located
+      dockerfile: Dockerfile
+      args:
+        VARIANT: "1.20"  # Pass the ARG used in the Dockerfile
+    environment:
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+    ports:
+      - "3000:3000" # Forward port 3000 from the container to the host
+    volumes:
+      - ..:/workspaces/go-wrtc # Mount the current directory into /workspaces in the container
+    user: "vscode"
+    tty: true
+    privileged: true # Allow the container to modify its own network settings (required for dbus/ufw)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
