@@ -13,6 +13,12 @@ build b:
 runweb rw:
 	go run ./go-web-test/web.go
 
+runhaproxy ha:
+	haproxy -f /etc/haproxy/haproxy.cfg
+
+playfile pf:
+	ffplay -nodisp -loop -1 /workspaces/go-wrtc/file2.mp3
+
 devconn c:
 	docker exec -it -w /workspaces/go-wrtc go_devcontainer  /bin/bash
 
