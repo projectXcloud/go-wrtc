@@ -11,7 +11,7 @@ import (
 // StartFFmpeg starts the FFmpeg process and returns the command and UDP listener.
 func StartFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 	// Create a UDP listener on a random port.
-	listener, err := net.ListenPacket("udp", "127.0.0.1:40000")
+	listener, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		return nil, nil, err
 	}
