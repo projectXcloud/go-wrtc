@@ -11,7 +11,7 @@ import (
 // StartFFmpeg starts the FFmpeg process and returns the command and UDP listener.
 func StartFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 	// Create a UDP listener on a random port.
-	listener, err := net.ListenPacket("udp", "127.0.0.1:0")
+	listener, err := net.ListenPacket("udp", "127.0.0.1:40000")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -45,15 +45,15 @@ func StartFFmpeg(testMode bool) (*exec.Cmd, net.PacketConn, error) {
 			"-re",
 			"-f", "pulse",
 			"-i", "default",
-			"-acodec", "libopus",
+			"-c:a", "libopus",
+			"-frame_duration", "40",
+			"-application", "lowdelay", // Ensures Opus is in lowdelay mode
 			"-ar", "48000", // Set sample rate to 48kHz
 			"-ac", "2", // Set number of channels to 2 (stereo)
 			"-b:a", "128k",
-			"-application", "audio", // Ensures Opus is in audio mode
 			"-payload_type", "111", // Explicitly set payload type to 111
 			"-f", "rtp",
 			"rtp://"+address,
-			"-tune", "zerolatency",
 		)
 	}
 
