@@ -3,14 +3,20 @@ var ws = new WebSocket("ws://localhost:3000/ws");
 var peerConnection = new RTCPeerConnection({
     iceTransportPolicy: "relay",
     iceServers: [
+        // {
+        //     urls: "stun:freeturn.net:3478"
+        // },
+        // {
+        //     urls: "turn:freestun.net:3478",
+        //     username: "free",
+        //     credential: "free"
+        // },
         {
-            urls: "stun:freeturn.net:3478"
+            urls: "turn:turn.testing.projectx.cloud",
+            username: "test",
+            credential: "test"
         },
-        {
-            urls: "turn:freestun.net:3478",
-            username: "free",
-            credential: "free"
-        },
+
     ]
 });
 // Temporarily make it accessible globally for debugging:

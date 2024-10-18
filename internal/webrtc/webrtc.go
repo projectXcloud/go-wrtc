@@ -13,9 +13,9 @@ import (
 
 // NewPeerConnection creates a new WebRTC PeerConnection with a configured MediaEngine.
 func NewPeerConnection() (*webrtc.PeerConnection, error) {
-	turnURL := "turn:freestun.net:3478" // Changed to lowercase 'turn:'
-	turnUsername := "free"
-	turnCredential := "free"
+	turnURL := "turn:turn.testing.projectx.cloud" // Changed to lowercase 'turn:'
+	turnUsername := "test"
+	turnCredential := "test"
 
 	// Initialize MediaEngine and register Opus codec with payload type 111.
 	mediaEngine := webrtc.MediaEngine{}
