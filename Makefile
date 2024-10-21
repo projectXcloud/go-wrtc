@@ -17,7 +17,7 @@ runhaproxy ha:
 	haproxy -f /etc/haproxy/haproxy.cfg
 
 playfile pf:
-	ffplay -nodisp -loop -1 /workspaces/go-wrtc/file2.mp3
+	while true; do gst-launch-1.0 filesrc location=file2.mp3 ! decodebin ! audioconvert ! audioresample ! autoaudiosink; sleep 1; done
 
 devconn c:
 	docker exec -it -w /workspaces/go-wrtc go_devcontainer  /bin/bash

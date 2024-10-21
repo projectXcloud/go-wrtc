@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/ProjectXcloud/go-wrtc/internal/ffmpeg"
+	"github.com/ProjectXcloud/go-wrtc/internal/gstreamer"
 	"github.com/ProjectXcloud/go-wrtc/internal/utils"
 	webrtcpkg "github.com/ProjectXcloud/go-wrtc/internal/webrtc"
 	"github.com/gorilla/websocket"
@@ -40,15 +40,15 @@ func HandleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start the FFmpeg process for this client.
-	ffmpegCmd, listener, err := ffmpeg.StartFFmpeg(testMode)
+	// Start the GStreamer process for this client.
+	gstCmd, listener, err := gstreamer.StartGStreamer(testMode)
 	if err != nil {
-		log.Println("FFmpeg Start Error:", err)
+		log.Println("GStreamer Start Error:", err)
 		return
 	}
 	defer func() {
-		if err := ffmpegCmd.Process.Kill(); err != nil {
-			log.Println("FFmpeg Process Kill Error:", err)
+		if err := gstCmd.Process.Kill(); err != nil {
+			log.Println("GStreamer Process Kill Error:", err)
 		}
 	}()
 
@@ -82,7 +82,7 @@ func HandleConnections(w http.ResponseWriter, r *http.Request, testMode bool) {
 	// Use a WaitGroup to wait for goroutines to finish.
 	var wg sync.WaitGroup
 
-	// Start reading RTP packets from FFmpeg and sending them to the audio track.
+	// Start reading RTP packets from GStreamer and sending them to the audio track.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
