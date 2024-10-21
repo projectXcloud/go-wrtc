@@ -73,9 +73,9 @@ make runweb
 
 By default, this will start a web server on `http://localhost:8000`. Navigate to this URL in a WebRTC-compatible browser to connect as a client and test the audio stream.
 
-### Step 2: Playing Audio with FFplay (Optional)
+### Step 2: Playing Audio
 
-To validate the audio stream independently of the WebRTC client, you can use `ffplay` to play an MP3 file on loop:
+To validate the audio stream independently of the WebRTC client, you can use `make pf` to play an MP3 file on loop:
 
 ```bash
 make pf
