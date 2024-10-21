@@ -78,7 +78,7 @@ By default, this will start a web server on `http://localhost:8000`. Navigate to
 To validate the audio stream independently of the WebRTC client, you can use `ffplay` to play an MP3 file on loop:
 
 ```bash
-ffplay -nodisp -loop 0 file2.mp3
+make pf
 ```
 
 This command will play the MP3 file in a loop without displaying video, which is useful for audio testing and quality checks.
