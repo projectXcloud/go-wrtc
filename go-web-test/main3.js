@@ -1,3 +1,18 @@
+async function tryPlay(mediaElement) {
+    while (true) {
+        try {
+            await mediaElement.play();  // Wait for play() to resolve or throw an error
+            console.log('Playback started!');
+            break;  // Exit the loop once it succeeds
+        } catch (error) {
+            console.log('Playback failed, retrying...');
+
+            // Introduce a small delay before trying again (to avoid tight loop)
+            await new Promise(resolve => setTimeout(resolve, 500)); 
+        }
+    }
+}
+
 
 var ws = new WebSocket("ws://localhost:3000/ws");
 var peerConnection = new RTCPeerConnection({
@@ -51,6 +66,7 @@ ws.onmessage = function (event) {
                         // Attach the track to the media element
                         const stream = new MediaStream([t.receiver.track]);
                         mediaElement.srcObject = stream;
+                        tryPlay(mediaElement);
                     }
                 });
                 window.myPeerConnection.getReceivers().forEach(r => {
